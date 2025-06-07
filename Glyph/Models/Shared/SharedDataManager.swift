@@ -18,6 +18,9 @@ class SharedDataManager {
     /// Configuration file name
     private let configFileName = "menu_configuration.json"
     
+    /// App settings file name
+    private let settingsFileName = "app_settings.json"
+    
     /// Custom icons directory name
     private let iconsDirectoryName = "custom_icons"
     
@@ -31,6 +34,11 @@ class SharedDataManager {
     /// Get the configuration file URL
     var configurationFileURL: URL? {
         return sharedContainerURL?.appendingPathComponent(configFileName)
+    }
+    
+    /// Get the app settings file URL
+    var settingsFileURL: URL? {
+        return sharedContainerURL?.appendingPathComponent(settingsFileName)
     }
     
     /// Get the custom icons directory URL
@@ -108,6 +116,36 @@ class SharedDataManager {
         
         let fileURL = iconsDirectory.appendingPathComponent(fileName)
         try FileManager.default.removeItem(at: fileURL)
+    }
+    
+    /// Save app settings to shared container
+    func saveSettings(_ settings: AppSettings) throws {
+        guard let fileURL = settingsFileURL else {
+            throw SharedDataError.containerNotFound
+        }
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        
+        let data = try encoder.encode(settings)
+        try data.write(to: fileURL)
+    }
+    
+    /// Load app settings from shared container
+    func loadSettings() throws -> AppSettings {
+        guard let fileURL = settingsFileURL else {
+            throw SharedDataError.containerNotFound
+        }
+        
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            // Return default settings if file doesn't exist
+            return AppSettings.defaultSettings
+        }
+        
+        let data = try Data(contentsOf: fileURL)
+        let decoder = JSONDecoder()
+        
+        return try decoder.decode(AppSettings.self, from: data)
     }
     
     /// Debug method to print all storage paths

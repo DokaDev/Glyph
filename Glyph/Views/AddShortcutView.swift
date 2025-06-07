@@ -21,6 +21,12 @@ struct AddShortcutView: View {
     @State private var isEnabled: Bool = true
     @State private var selectedIcon: MenuIcon = .system(SystemIconConfig.defaultIcons[0])
     
+    // Application scope states
+    @State private var showOnFolders: Bool = true
+    @State private var showOnFiles: Bool = true
+    @State private var fileTypeFilter: FileTypeFilter = .allFiles
+    @State private var allowedExtensions: String = ""
+    
     // Icon selection states
     @State private var iconSelectionType: IconSelectionType = .defaultIcon
     @State private var selectedSystemIcon: SystemIconConfig = SystemIconConfig.defaultIcons[0]
@@ -96,6 +102,7 @@ struct AddShortcutView: View {
     private var contentView: some View {
         Form {
             basicInfoSection
+            applicationScopeSection
             iconSelectionSection
             executionSection
         }
@@ -110,6 +117,110 @@ struct AddShortcutView: View {
             Toggle("Enabled", isOn: $isEnabled)
         } header: {
             Text("Basic Info")
+        }
+    }
+    
+    private var applicationScopeSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 16) {
+                // Folder toggle
+                HStack {
+                    Image(systemName: "folder")
+                        .foregroundColor(.accentColor)
+                        .frame(width: 20)
+                    
+                    Text("Show on Folders")
+                        .font(.body)
+                    
+                    Spacer()
+                    
+                    Toggle("", isOn: $showOnFolders)
+                        .toggleStyle(SwitchToggleStyle())
+                }
+                
+                // File toggle
+                HStack {
+                    Image(systemName: "doc")
+                        .foregroundColor(.accentColor)
+                        .frame(width: 20)
+                    
+                    Text("Show on Files")
+                        .font(.body)
+                    
+                    Spacer()
+                    
+                    Toggle("", isOn: $showOnFiles)
+                        .toggleStyle(SwitchToggleStyle())
+                }
+                
+                // File type filter (only shown when showOnFiles is true)
+                if showOnFiles {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Divider()
+                            .padding(.horizontal, -16)
+                        
+                        Text("File Type Filter")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .padding(.leading, 20)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            // All Files radio
+                            HStack {
+                                RadioButton(
+                                    isSelected: fileTypeFilter == .allFiles,
+                                    action: { fileTypeFilter = .allFiles }
+                                )
+                                
+                                Text("All Files")
+                                    .font(.body)
+                                
+                                Spacer()
+                            }
+                            .padding(.leading, 20)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                fileTypeFilter = .allFiles
+                            }
+                            
+                            // Specific Extensions radio
+                            HStack {
+                                RadioButton(
+                                    isSelected: fileTypeFilter == .specificExtensions,
+                                    action: { fileTypeFilter = .specificExtensions }
+                                )
+                                
+                                Text("Specific Extensions Only")
+                                    .font(.body)
+                                
+                                Spacer()
+                            }
+                            .padding(.leading, 20)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                fileTypeFilter = .specificExtensions
+                            }
+                            
+                            // Extensions input (only shown when specificExtensions is selected)
+                            if fileTypeFilter == .specificExtensions {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("File Extensions (comma-separated):")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.leading, 40)
+                                    
+                                    TextField("e.g., pdf, jpg, txt", text: $allowedExtensions)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .padding(.leading, 40)
+                                        .help("Enter file extensions without dots, separated by commas")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Application Scope")
         }
     }
     
@@ -399,6 +510,12 @@ struct AddShortcutView: View {
             isEnabled = item.isEnabled
             selectedIcon = item.icon
             
+            // Initialize application scope settings
+            showOnFolders = item.applicationScope.showOnFolders
+            showOnFiles = item.applicationScope.showOnFiles
+            fileTypeFilter = item.applicationScope.fileTypeFilter
+            allowedExtensions = item.applicationScope.allowedExtensions.joined(separator: ", ")
+            
             // Set icon selection type based on current icon
             print("DEBUG SETUP - Loading item with icon type: \(item.icon)")
             switch item.icon {
@@ -647,12 +764,26 @@ struct AddShortcutView: View {
             ))
         }
         
+        // Process allowed extensions
+        let processedExtensions = allowedExtensions
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        let appScope = ApplicationScope(
+            showOnFolders: showOnFolders,
+            showOnFiles: showOnFiles,
+            fileTypeFilter: fileTypeFilter,
+            allowedExtensions: processedExtensions
+        )
+        
         let shortcut = CustomMenuItem(
             id: editingItem?.id ?? UUID(),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             icon: finalIcon,
             executionType: execType,
             isEnabled: isEnabled,
+            applicationScope: appScope,
             sortOrder: editingItem?.sortOrder ?? 0,
             createdAt: editingItem?.createdAt ?? Date(),
             modifiedAt: Date()

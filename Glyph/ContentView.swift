@@ -6,9 +6,11 @@
 //
 
 import SwiftUI
+import AppKit
 
 enum SidebarItem: String, CaseIterable, Identifiable {
     case shortcuts = "Shortcuts"
+    case settings = "Settings"
     case about = "About"
     
     var id: String { rawValue }
@@ -17,6 +19,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .shortcuts:
             return "command"
+        case .settings:
+            return "gearshape"
         case .about:
             return "info.circle"
         }
@@ -28,6 +32,7 @@ struct ContentView: View {
     @State private var showingAddMenu = false
     @State private var showingDeleteAllAlert = false
     @StateObject private var mainViewModel = MainViewModel()
+    @StateObject private var settingsViewModel = SettingsViewModel()
     
     var body: some View {
         NavigationSplitView {
@@ -87,6 +92,8 @@ struct ContentView: View {
                                 .help("Add Shortcut")
                             }
                         })
+                case .settings:
+                    SettingsView(viewModel: settingsViewModel)
                 case .about:
                     AboutView()
                 }
@@ -108,6 +115,7 @@ struct ContentView: View {
         } message: {
             Text("Are you sure you want to delete all shortcuts? This action cannot be undone.")
         }
+        .preferredColorScheme(settingsViewModel.colorScheme)
     }
 }
 
@@ -356,6 +364,339 @@ struct ShortcutRow: View {
             } else {
                 return "Launch: \(config.appName), Params: \(config.customParameters)"
             }
+        }
+    }
+}
+
+struct SettingsView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            HStack {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 32))
+                    .foregroundColor(.accentColor)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Settings")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                    
+                    Text("Configure Glyph preferences and options")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, 32)
+            
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Debug Settings
+                    SettingsSection(title: "Debug", icon: "ladybug") {
+                        VStack(spacing: 12) {
+                            SettingsRow(
+                                title: "Enable Debug Mode",
+                                description: "Show additional debug information and logs in console",
+                                icon: "terminal"
+                            ) {
+                                Toggle("", isOn: $viewModel.showDebugInfo)
+                                    .toggleStyle(SwitchToggleStyle())
+                                    .onChange(of: viewModel.showDebugInfo) { _ in
+                                        viewModel.settingsDidChange()
+                                    }
+                            }
+                        }
+                    }
+                    
+                    // Data Management
+                    SettingsSection(title: "Data Management", icon: "externaldrive") {
+                        VStack(spacing: 12) {
+                            SettingsRow(
+                                title: "Export Shortcuts",
+                                description: "Save your shortcuts to a JSON file for backup",
+                                icon: "square.and.arrow.up"
+                            ) {
+                                Button("Export...") {
+                                    // TODO: Implement export functionality
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            
+                            Divider()
+                            
+                            SettingsRow(
+                                title: "Import Shortcuts",
+                                description: "Load shortcuts from a previously exported JSON file",
+                                icon: "square.and.arrow.down"
+                            ) {
+                                Button("Import...") {
+                                    // TODO: Implement import functionality
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                    
+                    // Appearance
+                    SettingsSection(title: "Appearance", icon: "paintbrush") {
+                        VStack(spacing: 12) {
+                            SettingsRow(
+                                title: "App Theme",
+                                description: "Choose between light, dark, or system theme",
+                                icon: "circle.lefthalf.filled"
+                            ) {
+                                Picker("", selection: $viewModel.appearanceMode) {
+                                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                                        HStack {
+                                            Image(systemName: mode.iconName)
+                                            Text(mode.displayName)
+                                        }
+                                        .tag(mode)
+                                    }
+                                }
+                                .pickerStyle(MenuPickerStyle())
+                                .frame(width: 160)
+                                .onChange(of: viewModel.appearanceMode) { _ in
+                                    viewModel.settingsDidChange()
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Startup Settings
+                    SettingsSection(title: "Startup", icon: "power") {
+                        VStack(spacing: 12) {
+                            SettingsRow(
+                                title: "Launch at Login",
+                                description: "Automatically start Glyph when you log in to macOS",
+                                icon: "play.circle"
+                            ) {
+                                Toggle("", isOn: $viewModel.launchAtStartup)
+                                    .toggleStyle(SwitchToggleStyle())
+                                    .onChange(of: viewModel.launchAtStartup) { _ in
+                                        viewModel.settingsDidChange()
+                                    }
+                            }
+                        }
+                    }
+                    
+                    // Dock Settings
+                    SettingsSection(title: "Dock", icon: "dock.rectangle") {
+                        VStack(spacing: 12) {
+                            SettingsRow(
+                                title: "Show in Dock",
+                                description: "Display Glyph icon in the Dock when running",
+                                icon: "app.badge"
+                            ) {
+                                Toggle("", isOn: $viewModel.showInDock)
+                                    .toggleStyle(SwitchToggleStyle())
+                                    .onChange(of: viewModel.showInDock) { _ in
+                                        viewModel.settingsDidChange()
+                                    }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 32)
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+enum AppearanceMode: String, CaseIterable {
+    case system = "System"
+    case light = "Light"
+    case dark = "Dark"
+    
+    var displayName: String {
+        return self.rawValue
+    }
+    
+    var iconName: String {
+        switch self {
+        case .system:
+            return "gear"
+        case .light:
+            return "sun.max"
+        case .dark:
+            return "moon"
+        }
+    }
+    
+
+}
+
+class SettingsViewModel: ObservableObject {
+    @Published var showDebugInfo = false
+    @Published var appearanceMode: AppearanceMode = .system
+    @Published var launchAtStartup = false
+    @Published var showInDock = true
+    
+    private var appSettings: AppSettings = AppSettings.defaultSettings
+    private let dataManager = SharedDataManager.shared
+    
+    var colorScheme: ColorScheme? {
+        switch appearanceMode {
+        case .system:
+            // 시스템 테마를 감지해서 명시적으로 반환
+            return getCurrentSystemColorScheme()
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        }
+    }
+    
+    private func getCurrentSystemColorScheme() -> ColorScheme {
+        let appearance = NSApp.effectiveAppearance
+        if appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua {
+            return .dark
+        } else {
+            return .light
+        }
+    }
+    
+    init() {
+        loadSettings()
+        setupSystemThemeObserver()
+    }
+    
+    private func setupSystemThemeObserver() {
+        // 시스템 테마 변경 감지
+        DistributedNotificationCenter.default.addObserver(
+            forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // System 모드일 때만 업데이트
+            if self?.appearanceMode == .system {
+                self?.objectWillChange.send()
+            }
+        }
+    }
+    
+    private func loadSettings() {
+        do {
+            appSettings = try dataManager.loadSettings()
+            
+            // Update published properties
+            showDebugInfo = appSettings.showDebugInfo
+            appearanceMode = AppearanceMode(rawValue: appSettings.appearanceMode) ?? .system
+            launchAtStartup = appSettings.launchAtStartup
+            showInDock = appSettings.showInDock
+            
+        } catch {
+            print("Failed to load settings: \(error)")
+            // Use default settings if loading fails
+            appSettings = AppSettings.defaultSettings
+        }
+    }
+    
+    private func saveSettings() {
+        // Update model with current values
+        appSettings.showDebugInfo = showDebugInfo
+        appSettings.appearanceMode = appearanceMode.rawValue
+        appSettings.launchAtStartup = launchAtStartup
+        appSettings.showInDock = showInDock
+        
+        do {
+            try dataManager.saveSettings(appSettings)
+            print("✅ Settings saved successfully to JSON")
+        } catch {
+            print("❌ Failed to save settings: \(error)")
+        }
+    }
+    
+    deinit {
+        DistributedNotificationCenter.default.removeObserver(self)
+    }
+    
+    // Called when any setting changes
+    func settingsDidChange() {
+        print("Settings changed - saving...")
+        print("Debug: \(showDebugInfo), Mode: \(appearanceMode.rawValue), Startup: \(launchAtStartup), Dock: \(showInDock)")
+        saveSettings()
+    }
+}
+
+struct SettingsSection<Content: View>: View {
+    let title: String
+    let icon: String
+    let content: Content
+    
+    init(title: String, icon: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(.accentColor)
+                    .frame(width: 20)
+                
+                Text(title)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: 0) {
+                content
+            }
+            .padding(16)
+            .background(Color.secondary.opacity(0.05))
+            .cornerRadius(12)
+        }
+    }
+}
+
+struct SettingsRow<Content: View>: View {
+    let title: String
+    let description: String
+    let icon: String
+    let content: Content
+    
+    init(title: String, description: String, icon: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.description = description
+        self.icon = icon
+        self.content = content()
+    }
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(.accentColor)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.body)
+                    .fontWeight(.medium)
+                
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            
+            Spacer()
+            
+            content
         }
     }
 }
