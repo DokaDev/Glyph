@@ -48,6 +48,14 @@ struct ContentView: View {
             }
             .navigationTitle("")
             .frame(minWidth: 200)
+            .onAppear {
+                // 저장된 마지막 페이지로 시작
+                selectedItem = settingsViewModel.lastSelectedPage
+            }
+            .onChange(of: selectedItem) {
+                // 페이지 변경 시 저장
+                settingsViewModel.pageDidChange(to: selectedItem)
+            }
         } detail: {
             // Detail View
             Group {
@@ -372,29 +380,29 @@ struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     
     var body: some View {
-        VStack(spacing: 24) {
-            // Header
-            HStack {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 32))
-                    .foregroundColor(.accentColor)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Settings")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+        ScrollView {
+            VStack(spacing: 24) {
+                // Header
+                HStack {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 32))
+                        .foregroundColor(.accentColor)
                     
-                    Text("Configure Glyph preferences and options")
-                        .font(.body)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Settings")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                        
+                        Text("Configure Glyph preferences and options")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
                 }
+                .padding(.horizontal, 32)
+                .padding(.top, 32)
                 
-                Spacer()
-            }
-            .padding(.horizontal, 32)
-            .padding(.top, 32)
-            
-            ScrollView {
                 VStack(spacing: 20) {
                     // Debug Settings
                     SettingsSection(title: "Debug", icon: "ladybug") {
@@ -406,7 +414,7 @@ struct SettingsView: View {
                             ) {
                                 Toggle("", isOn: $viewModel.showDebugInfo)
                                     .toggleStyle(SwitchToggleStyle())
-                                    .onChange(of: viewModel.showDebugInfo) { _ in
+                                    .onChange(of: viewModel.showDebugInfo) {
                                         viewModel.settingsDidChange()
                                     }
                             }
@@ -461,7 +469,7 @@ struct SettingsView: View {
                                 }
                                 .pickerStyle(MenuPickerStyle())
                                 .frame(width: 160)
-                                .onChange(of: viewModel.appearanceMode) { _ in
+                                .onChange(of: viewModel.appearanceMode) {
                                     viewModel.settingsDidChange()
                                 }
                             }
@@ -478,7 +486,7 @@ struct SettingsView: View {
                             ) {
                                 Toggle("", isOn: $viewModel.launchAtStartup)
                                     .toggleStyle(SwitchToggleStyle())
-                                    .onChange(of: viewModel.launchAtStartup) { _ in
+                                    .onChange(of: viewModel.launchAtStartup) {
                                         viewModel.settingsDidChange()
                                     }
                             }
@@ -495,7 +503,7 @@ struct SettingsView: View {
                             ) {
                                 Toggle("", isOn: $viewModel.showInDock)
                                     .toggleStyle(SwitchToggleStyle())
-                                    .onChange(of: viewModel.showInDock) { _ in
+                                    .onChange(of: viewModel.showInDock) {
                                         viewModel.settingsDidChange()
                                     }
                             }
@@ -503,9 +511,8 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.horizontal, 32)
+                .padding(.bottom, 32)
             }
-            
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -538,7 +545,8 @@ class SettingsViewModel: ObservableObject {
     @Published var showDebugInfo = false
     @Published var appearanceMode: AppearanceMode = .system
     @Published var launchAtStartup = false
-    @Published var showInDock = true
+    @Published var showInDock = false
+    @Published var lastSelectedPage: SidebarItem = .shortcuts
     
     private var appSettings: AppSettings = AppSettings.defaultSettings
     private let dataManager = SharedDataManager.shared
@@ -592,11 +600,17 @@ class SettingsViewModel: ObservableObject {
             appearanceMode = AppearanceMode(rawValue: appSettings.appearanceMode) ?? .system
             launchAtStartup = appSettings.launchAtStartup
             showInDock = appSettings.showInDock
+            lastSelectedPage = SidebarItem(rawValue: appSettings.lastSelectedPage) ?? .shortcuts
+            
+            // Apply dock visibility on app startup
+            updateDockVisibility()
             
         } catch {
             print("Failed to load settings: \(error)")
             // Use default settings if loading fails
             appSettings = AppSettings.defaultSettings
+            // Apply default dock visibility
+            updateDockVisibility()
         }
     }
     
@@ -606,6 +620,7 @@ class SettingsViewModel: ObservableObject {
         appSettings.appearanceMode = appearanceMode.rawValue
         appSettings.launchAtStartup = launchAtStartup
         appSettings.showInDock = showInDock
+        appSettings.lastSelectedPage = lastSelectedPage.rawValue
         
         do {
             try dataManager.saveSettings(appSettings)
@@ -624,6 +639,28 @@ class SettingsViewModel: ObservableObject {
         print("Settings changed - saving...")
         print("Debug: \(showDebugInfo), Mode: \(appearanceMode.rawValue), Startup: \(launchAtStartup), Dock: \(showInDock)")
         saveSettings()
+        
+        // Update dock visibility
+        updateDockVisibility()
+    }
+    
+    // Called when page changes
+    func pageDidChange(to page: SidebarItem) {
+        if lastSelectedPage != page {
+            lastSelectedPage = page
+            print("📄 Page changed to: \(page.rawValue)")
+            saveSettings()
+        }
+    }
+    
+    // Update dock icon visibility
+    private func updateDockVisibility() {
+        DispatchQueue.main.async {
+            // LSUIElement가 true로 설정되어 있으므로, regular로 변경해야만 Dock에 표시됨
+            let targetPolicy: NSApplication.ActivationPolicy = self.showInDock ? .regular : .accessory
+            NSApplication.shared.setActivationPolicy(targetPolicy)
+            print("✅ Dock visibility updated: \(self.showInDock ? "Visible" : "Hidden")")
+        }
     }
 }
 
@@ -703,49 +740,51 @@ struct SettingsRow<Content: View>: View {
 
 struct AboutView: View {
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            
-            VStack(spacing: 16) {
-                Image(systemName: "command.square.fill")
-                    .font(.system(size: 64))
-                    .foregroundColor(.accentColor)
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer()
                 
-                Text("Glyph")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                VStack(spacing: 16) {
+                    Image(systemName: "command.square.fill")
+                        .font(.system(size: 64))
+                        .foregroundColor(.accentColor)
+                    
+                    Text("Glyph")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                    
+                    Text("Custom Finder Context Menu")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
+                }
                 
-                Text("Custom Finder Context Menu")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Features:")
+                        .font(.headline)
+                    
+                    FeatureRow(icon: "terminal", text: "Execute shell commands with file context")
+                    FeatureRow(icon: "app.badge", text: "Launch applications with selected files")
+                    FeatureRow(icon: "photo", text: "Custom icons and system symbols")
+                    FeatureRow(icon: "text.variable", text: "Dynamic variables for file paths")
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(12)
+                
+                Spacer()
+                
+                VStack(spacing: 8) {
+                    Text("Version 1.0")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Made with ❤️ using SwiftUI")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
-            
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Features:")
-                    .font(.headline)
-                
-                FeatureRow(icon: "terminal", text: "Execute shell commands with file context")
-                FeatureRow(icon: "app.badge", text: "Launch applications with selected files")
-                FeatureRow(icon: "photo", text: "Custom icons and system symbols")
-                FeatureRow(icon: "text.variable", text: "Dynamic variables for file paths")
-            }
-            .padding()
-            .background(Color.secondary.opacity(0.1))
-            .cornerRadius(12)
-            
-            Spacer()
-            
-            VStack(spacing: 8) {
-                Text("Version 1.0")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Text("Made with ❤️ using SwiftUI")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            .padding(40)
         }
-        .padding(40)
     }
 }
 

@@ -2,18 +2,20 @@ import Foundation
 
 // MARK: - App Settings Model
 struct AppSettings: Codable, Identifiable {
-    let id = UUID()
+    var id = UUID()
     var showDebugInfo: Bool
     var appearanceMode: String // "System", "Light", "Dark"
     var launchAtStartup: Bool
     var showInDock: Bool
+    var lastSelectedPage: String // "Shortcuts", "Settings", "About"
     
     // Default settings
     static let defaultSettings = AppSettings(
         showDebugInfo: false,
         appearanceMode: "System",
         launchAtStartup: false,
-        showInDock: true
+        showInDock: false,
+        lastSelectedPage: "Shortcuts"
     )
     
     // Helper methods for appearance mode
