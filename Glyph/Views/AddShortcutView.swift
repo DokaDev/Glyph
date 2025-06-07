@@ -243,9 +243,7 @@ struct AddShortcutView: View {
         VStack(alignment: .leading, spacing: 12) {
             defaultIconRow
             customImageRow
-            if executionType == .application {
-                appIconRow
-            }
+            appIconRow
         }
     }
     
@@ -255,6 +253,13 @@ struct AddShortcutView: View {
                 isSelected: iconSelectionType == .defaultIcon,
                 action: {
                     iconSelectionType = .defaultIcon
+                    
+                    // Clear app icon related data when switching to default icon
+                    // This prevents stale data from affecting future app icon selections
+                    if executionType == .shellCommand {
+                        selectedAppIcon = nil
+                    }
+                    
                     updateSelectedIcon()
                 }
             )
@@ -271,6 +276,13 @@ struct AddShortcutView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             iconSelectionType = .defaultIcon
+            
+            // Clear app icon related data when switching to default icon
+            // This prevents stale data from affecting future app icon selections
+            if executionType == .shellCommand {
+                selectedAppIcon = nil
+            }
+            
             updateSelectedIcon()
         }
     }
@@ -361,7 +373,15 @@ struct AddShortcutView: View {
                 isSelected: iconSelectionType == .appIcon,
                 action: {
                     iconSelectionType = .appIcon
-                    updateSelectedIcon()
+                    
+                    // For shell command mode, automatically open app selection if no app is selected
+                    if executionType == .shellCommand && selectedAppIcon == nil {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            selectAppForIcon()
+                        }
+                    } else {
+                        updateSelectedIcon()
+                    }
                 }
             )
             
@@ -369,11 +389,53 @@ struct AddShortcutView: View {
                 .font(.body)
             
             Spacer()
+            
+            // Show browse button only in Shell Command mode
+            if iconSelectionType == .appIcon && executionType == .shellCommand {
+                appIconControls
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
             iconSelectionType = .appIcon
-            updateSelectedIcon()
+            
+            // For shell command mode, automatically open app selection if no app is selected
+            if executionType == .shellCommand && selectedAppIcon == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    selectAppForIcon()
+                }
+            } else {
+                updateSelectedIcon()
+            }
+        }
+    }
+    
+    private var appIconControls: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                if let appIcon = selectedAppIcon,
+                   case .application(let appConfig) = selectedIcon {
+                    Text(appConfig.appName)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text("No app selected")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Button("Browse...") {
+                    selectAppForIcon()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            
+            Text("Select an app to use its icon (icon only, not for execution)")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .italic()
         }
     }
     
@@ -526,6 +588,15 @@ struct AddShortcutView: View {
             case .application(let appConfig):
                 print("DEBUG SETUP - Icon type is APPLICATION: \(appConfig.appName)")
                 iconSelectionType = .appIcon
+                
+                // Load app icon data if available
+                if let iconData = appConfig.iconData,
+                   let nsImage = NSImage(data: iconData) {
+                    selectedAppIcon = nsImage
+                } else if !appConfig.appPath.isEmpty {
+                    // Try to load icon from app path
+                    selectedAppIcon = NSWorkspace.shared.icon(forFile: appConfig.appPath)
+                }
             case .custom(let config):
                 print("DEBUG SETUP - Icon type is CUSTOM: \(config.fileName), stored: \(config.storedFileName)")
                 iconSelectionType = .customImage
@@ -547,8 +618,8 @@ struct AddShortcutView: View {
                 appName = config.appName
                 appParameters = config.customParameters
                 
-                // Only load app icon if the current icon type is actually app icon
-                if case .application(let appConfig) = item.icon {
+                // Only load execution app icon if the current icon type is actually app icon AND we're in application mode
+                if case .application(let appConfig) = item.icon, executionType == .application {
                     if let iconData = appConfig.iconData,
                        let nsImage = NSImage(data: iconData) {
                         selectedAppIcon = nsImage
@@ -564,15 +635,18 @@ struct AddShortcutView: View {
     }
     
     private func handleExecutionTypeChange(_ newType: ExecutionTypeOption) {
-        if newType == .shellCommand && iconSelectionType == .appIcon {
-            // Reset to default icon when switching away from application
-            iconSelectionType = .defaultIcon
-            updateSelectedIcon()
-        } else if newType == .shellCommand && iconSelectionType == .customImage {
-            // Clean up custom image when switching to shell command
-            cleanupCurrentCustomImageIfNeeded()
-            iconSelectionType = .defaultIcon
-            updateSelectedIcon()
+        if newType == .shellCommand {
+            // When switching to shell command from application mode, clean up app icon data
+            // This prevents confusion and stale data regardless of current icon selection
+            if iconSelectionType == .appIcon {
+                iconSelectionType = .defaultIcon
+                updateSelectedIcon()
+            }
+            // Always clear app icon reference when switching to shell command
+            // This ensures fresh state for shell command app icon selection
+            selectedAppIcon = nil
+            
+            // Keep custom image as is - no confusion there
         } else if newType == .application {
             // Only open application selection dialog if no app is currently selected
             if appPath.isEmpty {
@@ -651,6 +725,48 @@ struct AddShortcutView: View {
         selectCustomImage()
     }
     
+    private func selectAppForIcon() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            // For shell command mode, we only need the app for its icon
+            // Don't modify appPath and appName which are used for application execution
+            let iconAppPath = url.path
+            let iconAppName = url.deletingPathExtension().lastPathComponent
+            
+            // Load the icon from the selected app
+            let iconAppIcon = NSWorkspace.shared.icon(forFile: url.path)
+            selectedAppIcon = iconAppIcon
+            
+            // Create AppIconConfig with the selected app info (separate from execution app)
+            var iconDataBase64: String?
+            let tiffData = iconAppIcon.tiffRepresentation
+            if let tiffData = tiffData,
+               let bitmapImageRep = NSBitmapImageRep(data: tiffData),
+               let pngData = bitmapImageRep.representation(using: .png, properties: [:]) {
+                iconDataBase64 = pngData.base64EncodedString()
+            }
+            
+            let appConfig = AppIconConfig(
+                appPath: iconAppPath,
+                appName: iconAppName,
+                bundleIdentifier: iconAppName, // Simplified
+                iconDataBase64: iconDataBase64,
+                appModifiedDate: Date()
+            )
+            selectedIcon = .application(appConfig)
+        } else {
+            // User cancelled - revert to default icon if no app icon was previously selected
+            if selectedAppIcon == nil {
+                iconSelectionType = .defaultIcon
+                updateSelectedIcon()
+            }
+        }
+    }
+    
     private func loadAppIcon(from appPath: String) {
         let url = URL(fileURLWithPath: appPath)
         selectedAppIcon = NSWorkspace.shared.icon(forFile: url.path)
@@ -687,20 +803,31 @@ struct AddShortcutView: View {
                 selectedIcon = .system(selectedSystemIcon)
             }
         case .appIcon:
-            if !appPath.isEmpty && !appName.isEmpty {
+            if let appIcon = selectedAppIcon {
                 // Convert NSImage to base64 data
                 var iconDataBase64: String?
-                if let appIcon = selectedAppIcon,
-                   let tiffData = appIcon.tiffRepresentation,
+                if let tiffData = appIcon.tiffRepresentation,
                    let bitmapImageRep = NSBitmapImageRep(data: tiffData),
                    let pngData = bitmapImageRep.representation(using: .png, properties: [:]) {
                     iconDataBase64 = pngData.base64EncodedString()
                 }
                 
+                // For shell command mode, use the icon app info (separate from execution app)
+                // For application mode, use the execution app info
+                let (iconAppPath, iconAppName) = if executionType == .shellCommand {
+                    if case .application(let existingConfig) = selectedIcon {
+                        (existingConfig.appPath, existingConfig.appName)
+                    } else {
+                        ("", "Unknown App") // Fallback
+                    }
+                } else {
+                    (appPath, appName)
+                }
+                
                 let appConfig = AppIconConfig(
-                    appPath: appPath,
-                    appName: appName,
-                    bundleIdentifier: appName, // Simplified for now
+                    appPath: iconAppPath,
+                    appName: iconAppName,
+                    bundleIdentifier: iconAppName, // Simplified for now
                     iconDataBase64: iconDataBase64,
                     appModifiedDate: Date()
                 )
