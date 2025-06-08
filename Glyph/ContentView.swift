@@ -469,7 +469,8 @@ struct SettingsView: View {
                                 }
                                 .pickerStyle(MenuPickerStyle())
                                 .frame(width: 160)
-                                .onChange(of: viewModel.appearanceMode) {
+                                .onChange(of: viewModel.appearanceMode) { oldValue, newValue in
+                                    print("🎨 App Theme changed from \(oldValue.rawValue) to \(newValue.rawValue)")
                                     viewModel.settingsDidChange()
                                 }
                             }
@@ -503,7 +504,8 @@ struct SettingsView: View {
                             ) {
                                 Toggle("", isOn: $viewModel.showInDock)
                                     .toggleStyle(SwitchToggleStyle())
-                                    .onChange(of: viewModel.showInDock) {
+                                    .onChange(of: viewModel.showInDock) { oldValue, newValue in
+                                        print("🏠 Show in Dock changed from \(oldValue) to \(newValue)")
                                         viewModel.settingsDidChange()
                                     }
                             }
@@ -554,8 +556,7 @@ class SettingsViewModel: ObservableObject {
     var colorScheme: ColorScheme? {
         switch appearanceMode {
         case .system:
-            // 시스템 테마를 감지해서 명시적으로 반환
-            return getCurrentSystemColorScheme()
+            return nil // SwiftUI가 시스템 설정을 자동으로 따르도록 함
         case .light:
             return .light
         case .dark:
@@ -563,14 +564,7 @@ class SettingsViewModel: ObservableObject {
         }
     }
     
-    private func getCurrentSystemColorScheme() -> ColorScheme {
-        let appearance = NSApp.effectiveAppearance
-        if appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua {
-            return .dark
-        } else {
-            return .light
-        }
-    }
+
     
     init() {
         loadSettings()
@@ -640,8 +634,13 @@ class SettingsViewModel: ObservableObject {
         print("Debug: \(showDebugInfo), Mode: \(appearanceMode.rawValue), Startup: \(launchAtStartup), Dock: \(showInDock)")
         saveSettings()
         
-        // Update dock visibility
+        // Update dock visibility immediately
         updateDockVisibility()
+        
+        // Force UI refresh for appearance mode
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
     }
     
     // Called when page changes
@@ -656,10 +655,20 @@ class SettingsViewModel: ObservableObject {
     // Update dock icon visibility
     private func updateDockVisibility() {
         DispatchQueue.main.async {
-            // LSUIElement가 true로 설정되어 있으므로, regular로 변경해야만 Dock에 표시됨
+            let currentPolicy = NSApplication.shared.activationPolicy()
             let targetPolicy: NSApplication.ActivationPolicy = self.showInDock ? .regular : .accessory
-            NSApplication.shared.setActivationPolicy(targetPolicy)
-            print("✅ Dock visibility updated: \(self.showInDock ? "Visible" : "Hidden")")
+            
+            if currentPolicy != targetPolicy {
+                NSApplication.shared.setActivationPolicy(targetPolicy)
+                print("✅ Dock visibility updated: \(self.showInDock ? "Visible" : "Hidden") (Policy: \(targetPolicy == .regular ? "regular" : "accessory"))")
+                
+                // Force app to refresh its status
+                if self.showInDock {
+                    NSApp.activate(ignoringOtherApps: false)
+                }
+            } else {
+                print("🔄 Dock visibility already correct: \(self.showInDock ? "Visible" : "Hidden")")
+            }
         }
     }
 }

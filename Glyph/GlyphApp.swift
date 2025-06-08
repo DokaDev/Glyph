@@ -35,7 +35,60 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AppDelegate.shared = self
     }
     
-
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Ensure the main window appears on top when app first launches
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.bringMainWindowToFront()
+        }
+    }
+    
+    private func bringMainWindowToFront() {
+        print("🚀 Bringing main window to front on app launch")
+        
+        // Find the main content window
+        var foundWindow: NSWindow? = nil
+        for window in NSApplication.shared.windows {
+            if !window.className.contains("StatusBar") && 
+               !window.className.contains("MenuBar") && 
+               !window.className.contains("PopupMenu") &&
+               !window.className.contains("Menu") &&
+               !(window is NSPanel) &&
+               window.contentView != nil {
+                // Include NSWindow or window classes created by SwiftUI
+                if window.className == "NSWindow" || 
+                   window.className.contains("SwiftUI") ||
+                   window.title.contains("Glyph") ||
+                   window.contentView?.className.contains("SwiftUI") == true {
+                    foundWindow = window
+                    print("🎯 Found main window on launch: \(window.className)")
+                    break
+                }
+            }
+        }
+        
+        if let window = foundWindow {
+            // Save the current window level
+            let originalLevel = window.level
+            
+            // Temporarily raise the window to the floating level
+            window.level = .floating
+            
+            // Force the window to the front
+            window.orderFrontRegardless()
+            window.makeKeyAndOrderFront(nil)
+            
+            // Activate the app itself
+            NSApp.activate(ignoringOtherApps: true)
+            
+            // Restore the window level after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                window.level = originalLevel
+                print("✅ Main window brought to front on app launch")
+            }
+        } else {
+            print("⚠️ No main window found on app launch")
+        }
+    }
     
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Prevent the app from terminating when the window is closed - only the menu bar remains
