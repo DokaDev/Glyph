@@ -1,7 +1,50 @@
+# Cursor IDE
 .cursor/
-PROJECT_README.md
-.DS_Store
 
-*.xcuserstate
+# Project specific
+PROJECT_README.md
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+build/
+DerivedData/
 *.xcuserdata
+*.xcuserstate
 *.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+xcuserdata/
+project.xcworkspace/
+.swiftpm/
+
+# Xcode Patch
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+*.xcodeproj/project.xcworkspace/*
+!*.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+
+# App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SwiftPM
+.build/
+.swiftpm/xcode/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+iOSInjectionProject/
