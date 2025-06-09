@@ -9,75 +9,142 @@ import Cocoa
 import FinderSync
 
 class FinderSync: FIFinderSync {
-
-    var myFolderURL = URL(fileURLWithPath: "/Users/Shared/MySyncExtension Documents")
+    
+    /// App Group identifier for data sharing
+    private let appGroupIdentifier = "group.com.dokalab.Glyph"
     
     override init() {
         super.init()
         
-        NSLog("FinderSync() launched from %@", Bundle.main.bundlePath as NSString)
+        NSLog("🚀 Glyph FinderSync Extension launched from %@", Bundle.main.bundlePath as NSString)
         
-        // Set up the directory we are syncing.
-        FIFinderSyncController.default().directoryURLs = [self.myFolderURL]
+        // Enable for all directories (remove the restriction to specific folder)
+        FIFinderSyncController.default().directoryURLs = Set([URL(fileURLWithPath: "/")])
         
-        // Set up images for our badge identifiers. For demonstration purposes, this uses off-the-shelf images.
-        FIFinderSyncController.default().setBadgeImage(NSImage(named: NSImage.colorPanelName)!, label: "Status One" , forBadgeIdentifier: "One")
-        FIFinderSyncController.default().setBadgeImage(NSImage(named: NSImage.cautionName)!, label: "Status Two", forBadgeIdentifier: "Two")
+        // Test shared container access
+        testSharedContainerAccess()
+    }
+    
+    private func testSharedContainerAccess() {
+        NSLog("🔍 Testing shared container access...")
+        
+        if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) {
+            NSLog("✅ Shared container URL: %@", containerURL.path)
+            
+            let configFileURL = containerURL.appendingPathComponent("menu_configuration.json")
+            if FileManager.default.fileExists(atPath: configFileURL.path) {
+                NSLog("✅ Configuration file found")
+            } else {
+                NSLog("⚠️ Configuration file not found, will create test data")
+            }
+        } else {
+            NSLog("❌ Shared container URL not found")
+        }
     }
     
     // MARK: - Primary Finder Sync protocol methods
     
     override func beginObservingDirectory(at url: URL) {
-        // The user is now seeing the container's contents.
-        // If they see it in more than one view at a time, we're only told once.
-        NSLog("beginObservingDirectoryAtURL: %@", url.path as NSString)
+        NSLog("📁 Begin observing directory: %@", url.path as NSString)
     }
-    
     
     override func endObservingDirectory(at url: URL) {
-        // The user is no longer seeing the container's contents.
-        NSLog("endObservingDirectoryAtURL: %@", url.path as NSString)
+        NSLog("📁 End observing directory: %@", url.path as NSString)
     }
     
-    override func requestBadgeIdentifier(for url: URL) {
-        NSLog("requestBadgeIdentifierForURL: %@", url.path as NSString)
-        
-        // For demonstration purposes, this picks one of our two badges, or no badge at all, based on the filename.
-        let whichBadge = abs(url.path.hash) % 3
-        let badgeIdentifier = ["", "One", "Two"][whichBadge]
-        FIFinderSyncController.default().setBadgeIdentifier(badgeIdentifier, for: url)
-    }
-    
-    // MARK: - Menu and toolbar item support
-    
-    override var toolbarItemName: String {
-        return "FinderSy"
-    }
-    
-    override var toolbarItemToolTip: String {
-        return "FinderSy: Click the toolbar item for a menu."
-    }
-    
-    override var toolbarItemImage: NSImage {
-        return NSImage(named: NSImage.cautionName)!
-    }
+    // MARK: - Menu support
     
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
-        // Produce a menu for the extension.
+        NSLog("🔍 Creating menu for kind: %d", menuKind.rawValue)
+        
         let menu = NSMenu(title: "")
-        menu.addItem(withTitle: "Example Menu Item", action: #selector(sampleAction(_:)), keyEquivalent: "")
+        
+        // Add test menu item
+        let testItem = NSMenuItem(title: "🧪 Glyph Test Menu", action: #selector(testMenuAction(_:)), keyEquivalent: "")
+        testItem.target = self
+        menu.addItem(testItem)
+        
+        // Add hardcoded test menu items for Phase 1
+        let testMenuItems = [
+            ("🚀 Open in Terminal", 1001),
+            ("📝 Open in VS Code", 1002),
+            ("📱 Test Action", 1003)
+        ]
+        
+        for (title, tag) in testMenuItems {
+            let item = NSMenuItem(title: title, action: #selector(configMenuAction(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = tag
+            NSLog("🔧 Setting menu item: %@ with tag: %d", title, tag)
+            menu.addItem(item)
+        }
+        
+        // Try to check if config file exists
+        if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) {
+            let configFileURL = containerURL.appendingPathComponent("menu_configuration.json")
+            if FileManager.default.fileExists(atPath: configFileURL.path) {
+                let statusItem = NSMenuItem(title: "✅ Config file found", action: nil, keyEquivalent: "")
+                statusItem.isEnabled = false
+                menu.addItem(statusItem)
+            } else {
+                let statusItem = NSMenuItem(title: "⚠️ Config file missing", action: nil, keyEquivalent: "")
+                statusItem.isEnabled = false
+                menu.addItem(statusItem)
+            }
+        }
+        
+        NSLog("✅ Created menu with %d items", menu.items.count)
         return menu
     }
     
-    @IBAction func sampleAction(_ sender: AnyObject?) {
-        let target = FIFinderSyncController.default().targetedURL()
-        let items = FIFinderSyncController.default().selectedItemURLs()
+    @objc func testMenuAction(_ sender: NSMenuItem) {
+        let targetURL = FIFinderSyncController.default().targetedURL()
+        let selectedURLs = FIFinderSyncController.default().selectedItemURLs()
         
-        let item = sender as! NSMenuItem
-        NSLog("sampleAction: menu item: %@, target = %@, items = ", item.title as NSString, target!.path as NSString)
-        for obj in items! {
-            NSLog("    %@", obj.path as NSString)
+        NSLog("🧪 Test menu clicked!")
+        NSLog("   Target URL: %@", targetURL?.path ?? "None")
+        NSLog("   Selected URLs count: %d", selectedURLs?.count ?? 0)
+        
+        if let urls = selectedURLs {
+            for (index, url) in urls.enumerated() {
+                NSLog("   Selected[%d]: %@", index, url.path)
+            }
         }
+    }
+    
+    @objc func configMenuAction(_ sender: NSMenuItem) {
+        NSLog("🔍 Config menu action called")
+        NSLog("   Menu title: %@", sender.title)
+        NSLog("   Menu tag: %d", sender.tag)
+        
+        let menuId: String
+        switch sender.tag {
+        case 1001:
+            menuId = "terminal_test"
+        case 1002:
+            menuId = "vscode_test"
+        case 1003:
+            menuId = "test_action"
+        default:
+            NSLog("❌ No menu ID found for tag: %d", sender.tag)
+            return
+        }
+        
+        NSLog("📋 Config menu clicked with ID: %@", menuId)
+        
+        let targetURL = FIFinderSyncController.default().targetedURL()
+        let selectedURLs = FIFinderSyncController.default().selectedItemURLs()
+        
+        NSLog("   Target URL: %@", targetURL?.path ?? "None")
+        NSLog("   Selected URLs count: %d", selectedURLs?.count ?? 0)
+        
+        if let urls = selectedURLs {
+            for (index, url) in urls.enumerated() {
+                NSLog("   Selected[%d]: %@", index, url.path)
+            }
+        }
+        
+        // TODO: Execute actual command in later phases
     }
 
 }

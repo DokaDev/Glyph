@@ -20,6 +20,8 @@ class MainViewModel: ObservableObject {
     
     init() {
         loadMenuItems()
+        // Create test data if no menu items exist
+        createTestDataIfNeeded()
     }
     
     /// Load menu items from shared storage
@@ -231,5 +233,40 @@ class MainViewModel: ObservableObject {
         case .applicationLaunch(let config):
             return "\(config.appName) \(config.customParameters)"
         }
+    }
+    
+    /// Create test data if no menu items exist (for Phase 1 testing)
+    private func createTestDataIfNeeded() {
+        if menuItems.isEmpty {
+            print("📝 Creating test data for Phase 1...")
+            createTestMenuItems()
+        }
+    }
+    
+    /// Create sample menu items for testing
+    func createTestMenuItems() {
+        let testItems = [
+            CustomMenuItem(
+                name: "Open in Terminal",
+                icon: .system(SystemIconConfig(symbolName: "terminal", displayName: "Terminal", category: .development)),
+                executionType: .shellCommand(ShellCommandConfig(command: "open -a Terminal %{selectedPath}"))
+            ),
+            CustomMenuItem(
+                name: "Open in VS Code",
+                icon: .system(SystemIconConfig(symbolName: "curlybraces", displayName: "VS Code", category: .development)),
+                executionType: .shellCommand(ShellCommandConfig(command: "open -a 'Visual Studio Code' %{selectedPath}"))
+            ),
+            CustomMenuItem(
+                name: "Copy Path",
+                icon: .system(SystemIconConfig(symbolName: "doc.on.clipboard", displayName: "Copy", category: .utility)),
+                executionType: .shellCommand(ShellCommandConfig(command: "echo %{selectedPath} | pbcopy"))
+            )
+        ]
+        
+        for item in testItems {
+            addMenuItem(item)
+        }
+        
+        print("✅ Created \(testItems.count) test menu items")
     }
 } 

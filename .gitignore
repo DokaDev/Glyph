@@ -3,6 +3,7 @@
 
 # Project specific
 PROJECT_README.md
+*.md
 
 # macOS
 .DS_Store
